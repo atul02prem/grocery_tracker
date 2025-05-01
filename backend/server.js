@@ -4,8 +4,23 @@ const path = require('path');
 const db = require('./db');
 
 const app = express();
-app.use(cors());
+
+// CORS configuration
+const corsOptions = {
+    origin: ['https://atul02prem.github.io', 'http://localhost:3000'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Initialize database
+db.initializeDatabase().catch(err => {
+    console.error('Failed to initialize database:', err);
+    process.exit(1);
+});
 
 // Serve static files from the parent directory
 app.use(express.static(path.join(__dirname, '..')));
@@ -185,6 +200,11 @@ app.get('/api/items/:userId/expiring', async (req, res) => {
     }
 });
 
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // Serve index.html for the root route
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'index.html'));
@@ -198,6 +218,28 @@ app.get('/:page', (req, res) => {
     } else {
         res.status(404).send('Page not found');
     }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({
+        success: false,
+        message: 'Something went wrong!',
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+    // Don't exit the process, just log the error
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit the process, just log the error
 });
 
 const PORT = process.env.PORT || 3000;

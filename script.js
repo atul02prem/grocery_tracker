@@ -13,37 +13,52 @@ function getQueryParams() {
 // ------------------------------
 // User Authentication Functions
 // ------------------------------
-function getUsers() {
-    return JSON.parse(localStorage.getItem('users')) || [];
-}
-function saveUsers(users) {
-    localStorage.setItem('users', JSON.stringify(users));
-}
-function signupUser(user) {
-    let users = getUsers();
-    if(users.find(u => u.email === user.email)) {
-        return { success: false, message: "Email already registered." };
+async function signupUser(user) {
+    try {
+        const response = await fetch(`${config.apiUrl}/users/signup`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(user)
+        });
+        const data = await response.json();
+        if (data.success) {
+            localStorage.setItem('currentUser', JSON.stringify(data.user));
+        }
+        return data;
+    } catch (error) {
+        return { success: false, message: "Error connecting to server." };
     }
-    users.push(user);
-    saveUsers(users);
-    localStorage.setItem('currentUser', JSON.stringify(user));
-    return { success: true };
 }
-function loginUser(email, password) {
-    let users = getUsers();
-    let user = users.find(u => u.email === email && u.password === password);
-    if(user) {
-        localStorage.setItem('currentUser', JSON.stringify(user));
-        return { success: true };
+
+async function loginUser(email, password) {
+    try {
+        const response = await fetch(`${config.apiUrl}/users/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await response.json();
+        if (data.success) {
+            localStorage.setItem('currentUser', JSON.stringify(data.user));
+        }
+        return data;
+    } catch (error) {
+        return { success: false, message: "Error connecting to server." };
     }
-    return { success: false, message: "Invalid email or password." };
 }
+
 function logoutUser() {
     localStorage.removeItem('currentUser');
 }
+
 function checkAuth() {
     return localStorage.getItem('currentUser') ? true : false;
 }
+
 function requireAuth() {
     if(!checkAuth()) {
         window.location.href = 'index.html';
@@ -58,35 +73,62 @@ function getCurrentUserEmail() {
     return currentUser ? currentUser.email : null;
 }
 
-function getItems() {
-    const email = getCurrentUserEmail();
-    if(!email) return [];
-    return JSON.parse(localStorage.getItem(`groceryItems_${email}`)) || [];
+async function getItems() {
+    try {
+        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        if (!currentUser) return [];
+        
+        const response = await fetch(`${config.apiUrl}/items/${currentUser.id}`);
+        const data = await response.json();
+        return data.items || [];
+    } catch (error) {
+        console.error('Error fetching items:', error);
+        return [];
+    }
 }
 
-function saveItems(items) {
-    const email = getCurrentUserEmail();
-    if(!email) return;
-    localStorage.setItem(`groceryItems_${email}`, JSON.stringify(items));
+async function addItem(item) {
+    try {
+        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        if (!currentUser) return { success: false, message: "Not authenticated" };
+
+        const response = await fetch(`${config.apiUrl}/items`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ...item, userId: currentUser.id })
+        });
+        return await response.json();
+    } catch (error) {
+        return { success: false, message: "Error connecting to server." };
+    }
 }
 
-function addItem(item) {
-    let items = getItems();
-    item.id = Date.now(); // Unique ID
-    items.push(item);
-    saveItems(items);
+async function updateItem(updatedItem) {
+    try {
+        const response = await fetch(`${config.apiUrl}/items/${updatedItem.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updatedItem)
+        });
+        return await response.json();
+    } catch (error) {
+        return { success: false, message: "Error connecting to server." };
+    }
 }
 
-function updateItem(updatedItem) {
-    let items = getItems();
-    items = items.map(item => item.id == updatedItem.id ? updatedItem : item);
-    saveItems(items);
-}
-
-function deleteItem(id) {
-    let items = getItems();
-    items = items.filter(item => item.id != id);
-    saveItems(items);
+async function deleteItem(id) {
+    try {
+        const response = await fetch(`${config.apiUrl}/items/${id}`, {
+            method: 'DELETE'
+        });
+        return await response.json();
+    } catch (error) {
+        return { success: false, message: "Error connecting to server." };
+    }
 }
 
 // ------------------------------

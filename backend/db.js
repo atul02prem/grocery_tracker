@@ -2,51 +2,79 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
-// Ensure the data directory exists
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir);
+// Use an absolute path for the database file
+const dbPath = path.join(__dirname, 'data', 'grocery.db');
+
+// Create the data directory if it doesn't exist
+if (!fs.existsSync(path.join(__dirname, 'data'))) {
+    fs.mkdirSync(path.join(__dirname, 'data'));
 }
 
-// Create database connection
-const dbPath = path.join(dataDir, 'grocery.db');
-const db = new sqlite3.Database(dbPath);
-
-// Initialize database schema
-const initSchema = `
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS grocery_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    item_name TEXT NOT NULL,
-    purchase_date DATE NOT NULL,
-    expiration_date DATE NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_user_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_items_user_id ON grocery_items(user_id);
-CREATE INDEX IF NOT EXISTS idx_items_expiration ON grocery_items(expiration_date);
-`;
-
-db.serialize(() => {
-    db.exec(initSchema, (err) => {
-        if (err) {
-            console.error('Error initializing database schema:', err);
-        } else {
-            console.log('Database schema initialized successfully');
-        }
-    });
+const db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+        console.error('Error opening database:', err);
+    } else {
+        console.log('Connected to the SQLite database.');
+    }
 });
+
+// Initialize database with tables
+async function initializeDatabase() {
+    return new Promise((resolve, reject) => {
+        db.serialize(() => {
+            // Enable foreign keys
+            db.run('PRAGMA foreign_keys = ON');
+
+            // Create users table
+            db.run(`CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`, (err) => {
+                if (err) {
+                    console.error('Error creating users table:', err);
+                    reject(err);
+                    return;
+                }
+            });
+
+            // Create grocery_items table
+            db.run(`CREATE TABLE IF NOT EXISTS grocery_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                purchase_date DATE NOT NULL,
+                expiration_date DATE NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )`, (err) => {
+                if (err) {
+                    console.error('Error creating grocery_items table:', err);
+                    reject(err);
+                    return;
+                }
+            });
+
+            // Create indexes
+            db.run('CREATE INDEX IF NOT EXISTS idx_user_email ON users(email)', (err) => {
+                if (err) console.error('Error creating email index:', err);
+            });
+
+            db.run('CREATE INDEX IF NOT EXISTS idx_items_user_id ON grocery_items(user_id)', (err) => {
+                if (err) console.error('Error creating user_id index:', err);
+            });
+
+            db.run('CREATE INDEX IF NOT EXISTS idx_items_expiration ON grocery_items(expiration_date)', (err) => {
+                if (err) console.error('Error creating expiration_date index:', err);
+            });
+
+            resolve();
+        });
+    });
+}
 
 // User operations
 const createUser = (firstName, lastName, email, password) => {
@@ -149,6 +177,7 @@ const getExpiringItems = (userId) => {
 };
 
 module.exports = {
+    initializeDatabase,
     createUser,
     getUserByEmail,
     createItem,
