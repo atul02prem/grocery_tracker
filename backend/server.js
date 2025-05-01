@@ -1,21 +1,19 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const axios = require('axios');
 const db = require('./db');
+require('dotenv').config();
 
 const app = express();
 
 // CORS configuration
-const corsOptions = {
-    origin: ['https://atul02prem.github.io', 'http://localhost:3000', 'http://localhost:5500', 'http://127.0.0.1:3000', 'http://127.0.0.1:5500'],
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-    preflightContinue: false,
-    optionsSuccessStatus: 204
-};
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-app.use(cors(corsOptions));
 app.use(express.json());
 
 // Initialize database and start server
@@ -237,6 +235,116 @@ async function startServer() {
                 res.status(500).json({ 
                     success: false, 
                     message: "Error getting expiring items: " + error.message 
+                });
+            }
+        });
+
+        // Add new endpoint for sending expiration alerts
+        app.post('/api/items/:userId/send-alerts', async (req, res) => {
+            try {
+                const userId = req.params.userId;
+                console.log('Fetching user with ID:', userId);
+                const user = await db.getUserById(userId);
+                
+                if (!user) {
+                    console.log('User not found:', userId);
+                    return res.status(404).json({
+                        success: false,
+                        message: "User not found"
+                    });
+                }
+
+                console.log('User found:', user.email);
+                const expiringItems = await db.getExpiringItems(userId);
+                console.log('Expiring items:', expiringItems);
+                
+                if (expiringItems.length === 0) {
+                    return res.json({
+                        success: true,
+                        message: "No items expiring soon"
+                    });
+                }
+
+                // Create email content
+                const emailContent = `
+                    <h2>Grocery Items Expiring Soon</h2>
+                    <p>The following items in your grocery list are expiring soon:</p>
+                    <ul>
+                        ${expiringItems.map(item => `
+                            <li>${item.itemName} - Expires on ${new Date(item.expirationDate).toLocaleDateString()}</li>
+                        `).join('')}
+                    </ul>
+                    <p>Please check your items and take necessary action.</p>
+                `;
+
+                try {
+                    console.log('Attempting to send email to:', user.email);
+                    
+                    // First, try to activate the email
+                    try {
+                        await axios.post(`https://formsubmit.co/activate/${encodeURIComponent(user.email)}`, {
+                            email: user.email
+                        });
+                        console.log('Email activation successful');
+                    } catch (activationError) {
+                        console.log('Email activation response:', activationError.response?.status);
+                        // If activation fails with 404, that's okay - the email will still be sent
+                        if (activationError.response?.status !== 404) {
+                            throw activationError;
+                        }
+                    }
+
+                    // Then send the actual email using FormSubmit's API endpoint
+                    const formSubmitResponse = await axios({
+                        method: 'post',
+                        url: `https://formsubmit.co/api/el/${encodeURIComponent(user.email)}`,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        data: {
+                            _subject: 'Grocery Items Expiring Soon!',
+                            _template: 'table',
+                            _autoresponse: 'Your expiration alerts have been sent successfully.',
+                            _captcha: 'true',
+                            email: user.email,
+                            name: `${user.first_name} ${user.last_name}`,
+                            message: emailContent
+                        }
+                    });
+
+                    console.log('FormSubmit response:', formSubmitResponse.data);
+
+                    if (formSubmitResponse.data.success) {
+                        res.json({
+                            success: true,
+                            message: "Expiration alerts sent successfully. Please check your email for confirmation."
+                        });
+                    } else {
+                        throw new Error('Failed to send email through FormSubmit');
+                    }
+                } catch (formSubmitError) {
+                    console.error('FormSubmit error:', {
+                        message: formSubmitError.message,
+                        response: formSubmitError.response?.data,
+                        status: formSubmitError.response?.status
+                    });
+
+                    // If it's a 404, it means the email needs to be activated
+                    if (formSubmitError.response?.status === 404) {
+                        res.json({
+                            success: true,
+                            message: "Please check your email for a confirmation link. After confirming your email, you'll receive the expiration alerts."
+                        });
+                    } else {
+                        throw new Error('Failed to send email: ' + (formSubmitError.response?.data?.message || formSubmitError.message));
+                    }
+                }
+            } catch (error) {
+                console.error('Error sending alerts:', error);
+                res.status(500).json({
+                    success: false,
+                    message: "Error sending expiration alerts: " + error.message
                 });
             }
         });

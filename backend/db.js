@@ -133,6 +133,19 @@ const getUserByEmail = (email) => {
     });
 };
 
+const getUserById = (userId) => {
+    return new Promise((resolve, reject) => {
+        db.get(
+            'SELECT * FROM users WHERE id = ?',
+            [userId],
+            (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            }
+        );
+    });
+};
+
 const updateUser = (userId, firstName, lastName, email) => {
     return new Promise((resolve, reject) => {
         // First check if the new email is already taken by another user
@@ -284,6 +297,7 @@ module.exports = {
     initializeDatabase,
     createUser,
     getUserByEmail,
+    getUserById,
     createItem,
     getItemsByUserId,
     updateItem,
