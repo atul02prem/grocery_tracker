@@ -7,10 +7,12 @@ const app = express();
 
 // CORS configuration
 const corsOptions = {
-    origin: ['https://atul02prem.github.io', 'http://localhost:3000'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    origin: ['https://atul02prem.github.io', 'http://localhost:3000', 'http://localhost:5500', 'http://127.0.0.1:3000', 'http://127.0.0.1:5500'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
@@ -79,6 +81,44 @@ async function startServer() {
                 res.status(500).json({ 
                     success: false, 
                     message: "Error logging in: " + error.message 
+                });
+            }
+        });
+
+        // Add new endpoint for updating user details
+        app.put('/api/users/:userId', async (req, res) => {
+            try {
+                const { firstName, lastName } = req.body;
+                const userId = req.params.userId;
+                
+                if (!firstName || !lastName) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        message: "First name and last name are required." 
+                    });
+                }
+
+                const success = await db.updateUser(userId, firstName, lastName);
+                if (!success) {
+                    return res.status(404).json({ 
+                        success: false, 
+                        message: "User not found." 
+                    });
+                }
+
+                res.json({ 
+                    success: true, 
+                    message: "User details updated successfully.",
+                    user: {
+                        id: userId,
+                        firstName,
+                        lastName
+                    }
+                });
+            } catch (error) {
+                res.status(500).json({ 
+                    success: false, 
+                    message: "Error updating user: " + error.message 
                 });
             }
         });

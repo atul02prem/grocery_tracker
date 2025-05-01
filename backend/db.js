@@ -133,6 +133,44 @@ const getUserByEmail = (email) => {
     });
 };
 
+const updateUser = (userId, firstName, lastName, email) => {
+    return new Promise((resolve, reject) => {
+        // First check if the new email is already taken by another user
+        db.get(
+            'SELECT id FROM users WHERE email = ? AND id != ?',
+            [email, userId],
+            (err, row) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                
+                if (row) {
+                    // Email is already taken by another user
+                    resolve({ success: false, message: "Email already in use by another account." });
+                    return;
+                }
+
+                // Update the user's information
+                const stmt = db.prepare(
+                    'UPDATE users SET first_name = ?, last_name = ?, email = ? WHERE id = ?'
+                );
+                stmt.run([firstName, lastName, email, userId], function(err) {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve({ 
+                            success: this.changes > 0,
+                            message: this.changes > 0 ? "Profile updated successfully" : "User not found"
+                        });
+                    }
+                });
+                stmt.finalize();
+            }
+        );
+    });
+};
+
 // Grocery item operations
 const createItem = (userId, itemName, purchaseDate, expirationDate) => {
     return new Promise((resolve, reject) => {
@@ -153,8 +191,20 @@ const getItemsByUserId = (userId) => {
             'SELECT * FROM grocery_items WHERE user_id = ? ORDER BY expiration_date ASC',
             [userId],
             (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                // Transform snake_case to camelCase
+                const transformedRows = rows.map(row => ({
+                    id: row.id,
+                    userId: row.user_id,
+                    itemName: row.item_name,
+                    purchaseDate: row.purchase_date,
+                    expirationDate: row.expiration_date,
+                    createdAt: row.created_at
+                }));
+                resolve(transformedRows);
             }
         );
     });
@@ -199,8 +249,20 @@ const getExpiringItems = (userId) => {
              ORDER BY expiration_date ASC`,
             [userId, threeDaysFromNow.toISOString().split('T')[0]],
             (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                // Transform snake_case to camelCase
+                const transformedRows = rows.map(row => ({
+                    id: row.id,
+                    userId: row.user_id,
+                    itemName: row.item_name,
+                    purchaseDate: row.purchase_date,
+                    expirationDate: row.expiration_date,
+                    createdAt: row.created_at
+                }));
+                resolve(transformedRows);
             }
         );
     });
@@ -226,5 +288,6 @@ module.exports = {
     getItemsByUserId,
     updateItem,
     deleteItem,
-    getExpiringItems
+    getExpiringItems,
+    updateUser
 }; 

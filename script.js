@@ -10,11 +10,15 @@ function getQueryParams() {
     return params;
 }
 
+// Add this at the top of your file, after the existing code
+console.log('Script loaded successfully');
+
 // ------------------------------
 // User Authentication Functions
 // ------------------------------
 async function signupUser(user) {
     try {
+        console.log('Attempting to signup with:', { email: user.email });
         const response = await fetch(`${config.apiUrl}/users/signup`, {
             method: 'POST',
             headers: {
@@ -22,18 +26,23 @@ async function signupUser(user) {
             },
             body: JSON.stringify(user)
         });
+        console.log('Response status:', response.status);
         const data = await response.json();
+        console.log('Signup response:', data);
         if (data.success) {
             localStorage.setItem('currentUser', JSON.stringify(data.user));
+            window.location.href = 'dashboard.html';
         }
         return data;
     } catch (error) {
+        console.error('Signup error:', error);
         return { success: false, message: "Error connecting to server." };
     }
 }
 
 async function loginUser(email, password) {
     try {
+        console.log('Attempting to login with:', { email });
         const response = await fetch(`${config.apiUrl}/users/login`, {
             method: 'POST',
             headers: {
@@ -41,12 +50,25 @@ async function loginUser(email, password) {
             },
             body: JSON.stringify({ email, password })
         });
+        console.log('Response status:', response.status);
         const data = await response.json();
+        console.log('Login response:', data);
         if (data.success) {
             localStorage.setItem('currentUser', JSON.stringify(data.user));
+            window.location.href = 'dashboard.html';
+        } else {
+            const loginMessage = document.getElementById('loginMessage');
+            if (loginMessage) {
+                loginMessage.textContent = data.message || 'Login failed';
+            }
         }
         return data;
     } catch (error) {
+        console.error('Login error:', error);
+        const loginMessage = document.getElementById('loginMessage');
+        if (loginMessage) {
+            loginMessage.textContent = 'Error connecting to server';
+        }
         return { success: false, message: "Error connecting to server." };
     }
 }
@@ -76,11 +98,28 @@ function getCurrentUserEmail() {
 async function getItems() {
     try {
         const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-        if (!currentUser) return [];
+        if (!currentUser) {
+            console.log('No current user found');
+            return [];
+        }
         
+        console.log('Fetching items for user:', currentUser.id);
         const response = await fetch(`${config.apiUrl}/items/${currentUser.id}`);
+        console.log('Response status:', response.status);
         const data = await response.json();
-        return data.items || [];
+        console.log('Items response:', data);
+        
+        if (!data.success) {
+            console.error('API returned error:', data.message);
+            return [];
+        }
+        
+        if (!Array.isArray(data.items)) {
+            console.error('API did not return an array of items:', data);
+            return [];
+        }
+        
+        return data.items;
     } catch (error) {
         console.error('Error fetching items:', error);
         return [];
@@ -134,90 +173,113 @@ async function deleteItem(id) {
 // ------------------------------
 // Notification Functions
 // ------------------------------
-function displayNotifications() {
-    let items = getItems();
-    let notifications = items.filter(item => {
-        let expDate = new Date(item.expirationDate);
-        let now = new Date();
-        let diffTime = expDate - now;
-        let diffDays = diffTime / (1000 * 60 * 60 * 24);
-        return diffDays <= 3 && diffDays >= 0;
-    });
-    let notificationArea = document.getElementById('notificationArea');
-    if(notificationArea) {
-        notificationArea.innerHTML = '';
-        if(notifications.length > 0) {
-            notifications.forEach(item => {
-                let div = document.createElement('div');
-                div.className = 'notification';
-                div.textContent = `${item.itemName} is expiring soon on ${item.expirationDate}`;
-                notificationArea.appendChild(div);
-            });
+async function displayNotifications() {
+    try {
+        const items = await getItems();
+        const notifications = items.filter(item => {
+            const expDate = new Date(item.expirationDate);
+            const now = new Date();
+            const diffTime = expDate - now;
+            const diffDays = diffTime / (1000 * 60 * 60 * 24);
+            return diffDays <= 3 && diffDays >= 0;
+        });
+        
+        const notificationArea = document.getElementById('notificationArea');
+        if(notificationArea) {
+            notificationArea.innerHTML = '';
+            if(notifications.length > 0) {
+                notifications.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'notification';
+                    div.textContent = `${item.itemName} is expiring soon on ${item.expirationDate}`;
+                    notificationArea.appendChild(div);
+                });
+            }
         }
+    } catch (error) {
+        console.error('Error displaying notifications:', error);
     }
 }
 
 // ------------------------------
 // Page Event Listeners
 // ------------------------------
-document.addEventListener('DOMContentLoaded', function() {
-    // Logout button (applies to all pages with nav)
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('DOM Content Loaded');
+    
+    // Logout button
     let logoutBtn = document.getElementById('logoutBtn');
     if(logoutBtn) {
+        console.log('Logout button found');
         logoutBtn.addEventListener('click', function() {
+            console.log('Logout button clicked');
             logoutUser();
             window.location.href = 'index.html';
         });
     }
 
-    // Login page
+    // Login form
     let loginForm = document.getElementById('loginForm');
     if(loginForm) {
-        loginForm.addEventListener('submit', function(e) {
+        console.log('Login form found');
+        loginForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            let email = document.getElementById('email').value;
-            let password = document.getElementById('password').value;
-            let result = loginUser(email, password);
-            let loginMessage = document.getElementById('loginMessage');
-            if(result.success) {
-                window.location.href = 'dashboard.html';
-            } else {
-                loginMessage.textContent = result.message;
+            console.log('Login form submitted');
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const loginMessage = document.getElementById('loginMessage');
+            
+            try {
+                const result = await loginUser(email, password);
+                if (!result.success) {
+                    loginMessage.textContent = result.message || 'Login failed';
+                }
+            } catch (error) {
+                console.error('Login form error:', error);
+                loginMessage.textContent = 'An error occurred during login';
             }
         });
     }
 
-    // Signup page
+    // Signup form
     let signupForm = document.getElementById('signupForm');
     if(signupForm) {
-        signupForm.addEventListener('submit', function(e) {
+        console.log('Signup form found');
+        signupForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            let user = {
+            console.log('Signup form submitted');
+            const user = {
                 firstName: document.getElementById('firstName').value,
                 lastName: document.getElementById('lastName').value,
                 email: document.getElementById('email').value,
                 password: document.getElementById('password').value
             };
-            let result = signupUser(user);
-            let signupMessage = document.getElementById('signupMessage');
-            if(result.success) {
-                window.location.href = 'dashboard.html';
-            } else {
-                signupMessage.textContent = result.message;
+            const signupMessage = document.getElementById('signupMessage');
+            
+            try {
+                const result = await signupUser(user);
+                if (!result.success) {
+                    signupMessage.textContent = result.message || 'Signup failed';
+                }
+            } catch (error) {
+                console.error('Signup form error:', error);
+                signupMessage.textContent = 'An error occurred during signup';
             }
         });
     }
 
-    // Add Item page
+    // Add Item form
     let addItemForm = document.getElementById('addItemForm');
     if(addItemForm) {
+        console.log('Add item form found');
         requireAuth();
-        addItemForm.addEventListener('submit', function(e) {
+        addItemForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            let itemName = document.getElementById('itemName').value;
-            let purchaseDate = document.getElementById('purchaseDate').value;
-            let expirationDate = document.getElementById('expirationDate').value;
-            let addItemMessage = document.getElementById('addItemMessage');
+            console.log('Add item form submitted');
+            const itemName = document.getElementById('itemName').value;
+            const purchaseDate = document.getElementById('purchaseDate').value;
+            const expirationDate = document.getElementById('expirationDate').value;
+            const addItemMessage = document.getElementById('addItemMessage');
 
             if(!itemName || !purchaseDate || !expirationDate) {
                 addItemMessage.textContent = "All fields are required.";
@@ -229,12 +291,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            let item = { itemName, purchaseDate, expirationDate };
-            addItem(item);
-            addItemMessage.textContent = "Item added successfully!";
-            setTimeout(() => {
-                window.location.href = 'dashboard.html';
-            }, 1000); // Delay to show success message
+            try {
+                const item = { itemName, purchaseDate, expirationDate };
+                const result = await addItem(item);
+                if (result.success) {
+                    addItemMessage.textContent = "Item added successfully!";
+                    setTimeout(() => {
+                        window.location.href = 'dashboard.html';
+                    }, 1000);
+                } else {
+                    addItemMessage.textContent = result.message || 'Failed to add item';
+                }
+            } catch (error) {
+                console.error('Add item error:', error);
+                addItemMessage.textContent = 'An error occurred while adding the item';
+            }
         });
     }
 
@@ -244,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
         requireAuth();
         let params = getQueryParams();
         let itemId = params.id;
-        let items = getItems();
+        let items = await getItems();
         let item = items.find(i => i.id == itemId);
         if(item) {
             document.getElementById('editItemId').value = item.id;
@@ -272,23 +343,42 @@ document.addEventListener('DOMContentLoaded', function() {
     // Dashboard page
     if(document.getElementById('itemsTable')) {
         requireAuth();
-        let items = getItems();
-        let tbody = document.querySelector('#itemsTable tbody');
-        tbody.innerHTML = '';
-        items.forEach(item => {
-            let tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${item.itemName}</td>
-                <td>${item.purchaseDate}</td>
-                <td>${item.expirationDate}</td>
-                <td>
-                    <a href="edit-item.html?id=${item.id}">Edit</a>
-                    <button onclick="deleteItemAndRefresh(${item.id})">Delete</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-        displayNotifications();
+        try {
+            const items = await getItems();
+            console.log('Retrieved items for dashboard:', items);
+            
+            const tbody = document.querySelector('#itemsTable tbody');
+            if (tbody) {
+                tbody.innerHTML = '';
+                if (Array.isArray(items) && items.length > 0) {
+                    items.forEach(item => {
+                        console.log('Processing item:', item);
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${item.itemName || 'N/A'}</td>
+                            <td>${item.purchaseDate || 'N/A'}</td>
+                            <td>${item.expirationDate || 'N/A'}</td>
+                            <td>
+                                <a href="edit-item.html?id=${item.id}">Edit</a>
+                                <button onclick="deleteItemAndRefresh(${item.id})">Delete</button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = '<td colspan="4">No items found</td>';
+                    tbody.appendChild(tr);
+                }
+            }
+            await displayNotifications();
+        } catch (error) {
+            console.error('Error initializing dashboard:', error);
+            const tbody = document.querySelector('#itemsTable tbody');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="4">Error loading items</td></tr>';
+            }
+        }
     }
 
     // Dynamic Email Sending for Dashboard
@@ -302,50 +392,117 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        emailForm.addEventListener('submit', function(e) {
+        emailForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const items = getItems();
-            const today = new Date();
-            const soonExpiring = items.filter(item => {
-                const expiry = new Date(item.expirationDate);
-                const diffDays = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-                return diffDays <= 3 && diffDays >= 0;
-            });
+            try {
+                const items = await getItems();
+                console.log('Items for email:', items);
+                
+                if (!Array.isArray(items)) {
+                    console.error('Items is not an array:', items);
+                    return;
+                }
 
-            const message = soonExpiring.length > 0
-                ? soonExpiring.map(item => `- ${item.itemName} (expires on ${item.expirationDate})`).join('\n')
-                : "No grocery items are expiring in the next 3 days.";
+                const today = new Date();
+                const soonExpiring = items.filter(item => {
+                    const expiry = new Date(item.expirationDate);
+                    const diffDays = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+                    return diffDays <= 3 && diffDays >= 0;
+                });
 
-            const messageBox = document.getElementById('messageBox');
-            messageBox.value = message;
+                const message = soonExpiring.length > 0
+                    ? soonExpiring.map(item => `- ${item.itemName} (expires on ${item.expirationDate})`).join('\n')
+                    : "No grocery items are expiring in the next 3 days.";
 
-            // Create a hidden form to submit to Formsubmit.co dynamically
-            const dynamicForm = document.createElement('form');
-            dynamicForm.method = 'POST';
-            dynamicForm.action = `https://formsubmit.co/${encodeURIComponent(currentUser.email)}`;
-            dynamicForm.style.display = 'none';
+                const messageBox = document.getElementById('messageBox');
+                messageBox.value = message;
 
-            const subjectInput = document.createElement('input');
-            subjectInput.type = 'hidden';
-            subjectInput.name = '_subject';
-            subjectInput.value = 'Grocery Items Expiring Soon!';
-            dynamicForm.appendChild(subjectInput);
+                // Create a hidden form to submit to Formsubmit.co dynamically
+                const dynamicForm = document.createElement('form');
+                dynamicForm.method = 'POST';
+                dynamicForm.action = `https://formsubmit.co/${encodeURIComponent(currentUser.email)}`;
+                dynamicForm.style.display = 'none';
 
-            const templateInput = document.createElement('input');
-            templateInput.type = 'hidden';
-            templateInput.name = '_template';
-            templateInput.value = 'box';
-            dynamicForm.appendChild(templateInput);
+                const subjectInput = document.createElement('input');
+                subjectInput.type = 'hidden';
+                subjectInput.name = '_subject';
+                subjectInput.value = 'Grocery Items Expiring Soon!';
+                dynamicForm.appendChild(subjectInput);
 
-            const messageInput = document.createElement('textarea');
-            messageInput.name = 'message';
-            messageInput.value = message;
-            dynamicForm.appendChild(messageInput);
+                const templateInput = document.createElement('input');
+                templateInput.type = 'hidden';
+                templateInput.name = '_template';
+                templateInput.value = 'box';
+                dynamicForm.appendChild(templateInput);
 
-            document.body.appendChild(dynamicForm);
-            dynamicForm.submit();
-            document.body.removeChild(dynamicForm);
+                const messageInput = document.createElement('textarea');
+                messageInput.name = 'message';
+                messageInput.value = message;
+                dynamicForm.appendChild(messageInput);
+
+                document.body.appendChild(dynamicForm);
+                dynamicForm.submit();
+                document.body.removeChild(dynamicForm);
+            } catch (error) {
+                console.error('Error sending email:', error);
+            }
+        });
+    }
+
+    // Profile update form
+    let updateProfileForm = document.getElementById('updateProfileForm');
+    if(updateProfileForm) {
+        console.log('Profile form found');
+        requireAuth();
+        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        
+        if(!currentUser) {
+            console.error('No current user found');
+            window.location.href = 'index.html';
+            return;
+        }
+        
+        console.log('Current user:', currentUser);
+        
+        // Pre-fill the form with current user data
+        document.getElementById('firstName').value = currentUser.firstName || '';
+        document.getElementById('lastName').value = currentUser.lastName || '';
+        document.getElementById('email').value = currentUser.email || '';
+
+        updateProfileForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            console.log('Profile update form submitted');
+            
+            const firstName = document.getElementById('firstName').value;
+            const lastName = document.getElementById('lastName').value;
+            const updateMessage = document.getElementById('updateMessage');
+
+            if(!firstName || !lastName) {
+                updateMessage.textContent = "First name and last name are required";
+                updateMessage.style.color = "red";
+                return;
+            }
+
+            try {
+                const result = await updateUserProfile(currentUser.id, firstName, lastName);
+                if (result.success) {
+                    updateMessage.textContent = "Profile updated successfully!";
+                    updateMessage.style.color = "green";
+                    
+                    // Update the stored user data
+                    currentUser.firstName = firstName;
+                    currentUser.lastName = lastName;
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                } else {
+                    updateMessage.textContent = result.message || 'Failed to update profile';
+                    updateMessage.style.color = "red";
+                }
+            } catch (error) {
+                console.error('Profile update error:', error);
+                updateMessage.textContent = 'An error occurred while updating profile';
+                updateMessage.style.color = "red";
+            }
         });
     }
 });
@@ -355,5 +512,26 @@ function deleteItemAndRefresh(id) {
     if(confirm("Are you sure you want to delete this item?")) {
         deleteItem(id);
         window.location.reload();
+    }
+}
+
+// Add this function after the other user-related functions
+async function updateUserProfile(userId, firstName, lastName) {
+    try {
+        console.log('Updating profile for user:', userId);
+        const response = await fetch(`${config.apiUrl}/users/${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ firstName, lastName })
+        });
+        console.log('Response status:', response.status);
+        const data = await response.json();
+        console.log('Update response:', data);
+        return data;
+    } catch (error) {
+        console.error('Profile update error:', error);
+        return { success: false, message: "Error connecting to server." };
     }
 }

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Update Profile - Grocery Tracker</title>
+    <link href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav>
+        <div class="nav-links">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="add-item.html">Add Item</a>
+            <a href="profile.html" class="active">Profile</a>
+        </div>
+        <button id="logoutBtn">Logout</button>
+    </nav>
+    <div class="container">
+        <h1>Update Profile</h1>
+        <form id="updateProfileForm">
+            <input type="text" id="firstName" placeholder="First Name" required>
+            <input type="text" id="lastName" placeholder="Last Name" required>
+            <input type="email" id="email" placeholder="Email" readonly>
+            <button type="submit">Update Profile</button>
+        </form>
+        <div id="updateMessage"></div>
+    </div>
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html> 
