@@ -13,6 +13,7 @@
   },
   "variables": {
     "NODE_ENV": "production",
-    "PORT": "10000"
+    "PORT": "10000",
+    "RAILWAY_STATIC_URL": "https://atul02prem.github.io/grocery_tracker"
   }
 } 

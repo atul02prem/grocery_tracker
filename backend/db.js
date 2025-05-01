@@ -6,73 +6,103 @@ const fs = require('fs');
 const dbPath = path.join(__dirname, 'data', 'grocery.db');
 
 // Create the data directory if it doesn't exist
-if (!fs.existsSync(path.join(__dirname, 'data'))) {
-    fs.mkdirSync(path.join(__dirname, 'data'));
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+    try {
+        fs.mkdirSync(dataDir, { recursive: true });
+        console.log('Created data directory:', dataDir);
+    } catch (err) {
+        console.error('Error creating data directory:', err);
+        throw err;
+    }
 }
 
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-        console.error('Error opening database:', err);
-    } else {
-        console.log('Connected to the SQLite database.');
-    }
-});
+// Initialize database connection
+let db;
+try {
+    db = new sqlite3.Database(dbPath, (err) => {
+        if (err) {
+            console.error('Error opening database:', err);
+            throw err;
+        }
+        console.log('Connected to the SQLite database at:', dbPath);
+    });
+} catch (err) {
+    console.error('Failed to create database connection:', err);
+    throw err;
+}
 
 // Initialize database with tables
 async function initializeDatabase() {
     return new Promise((resolve, reject) => {
-        db.serialize(() => {
-            // Enable foreign keys
-            db.run('PRAGMA foreign_keys = ON');
+        try {
+            db.serialize(() => {
+                // Enable foreign keys
+                db.run('PRAGMA foreign_keys = ON', (err) => {
+                    if (err) {
+                        console.error('Error enabling foreign keys:', err);
+                        reject(err);
+                        return;
+                    }
+                });
 
-            // Create users table
-            db.run(`CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                first_name TEXT NOT NULL,
-                last_name TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )`, (err) => {
-                if (err) {
-                    console.error('Error creating users table:', err);
-                    reject(err);
-                    return;
-                }
+                // Create users table
+                db.run(`CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    first_name TEXT NOT NULL,
+                    last_name TEXT NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )`, (err) => {
+                    if (err) {
+                        console.error('Error creating users table:', err);
+                        reject(err);
+                        return;
+                    }
+                    console.log('Users table created or already exists');
+                });
+
+                // Create grocery_items table
+                db.run(`CREATE TABLE IF NOT EXISTS grocery_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    item_name TEXT NOT NULL,
+                    purchase_date DATE NOT NULL,
+                    expiration_date DATE NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )`, (err) => {
+                    if (err) {
+                        console.error('Error creating grocery_items table:', err);
+                        reject(err);
+                        return;
+                    }
+                    console.log('Grocery items table created or already exists');
+                });
+
+                // Create indexes
+                db.run('CREATE INDEX IF NOT EXISTS idx_user_email ON users(email)', (err) => {
+                    if (err) console.error('Error creating email index:', err);
+                    else console.log('Email index created or already exists');
+                });
+
+                db.run('CREATE INDEX IF NOT EXISTS idx_items_user_id ON grocery_items(user_id)', (err) => {
+                    if (err) console.error('Error creating user_id index:', err);
+                    else console.log('User ID index created or already exists');
+                });
+
+                db.run('CREATE INDEX IF NOT EXISTS idx_items_expiration ON grocery_items(expiration_date)', (err) => {
+                    if (err) console.error('Error creating expiration_date index:', err);
+                    else console.log('Expiration date index created or already exists');
+                });
+
+                resolve();
             });
-
-            // Create grocery_items table
-            db.run(`CREATE TABLE IF NOT EXISTS grocery_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                item_name TEXT NOT NULL,
-                purchase_date DATE NOT NULL,
-                expiration_date DATE NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )`, (err) => {
-                if (err) {
-                    console.error('Error creating grocery_items table:', err);
-                    reject(err);
-                    return;
-                }
-            });
-
-            // Create indexes
-            db.run('CREATE INDEX IF NOT EXISTS idx_user_email ON users(email)', (err) => {
-                if (err) console.error('Error creating email index:', err);
-            });
-
-            db.run('CREATE INDEX IF NOT EXISTS idx_items_user_id ON grocery_items(user_id)', (err) => {
-                if (err) console.error('Error creating user_id index:', err);
-            });
-
-            db.run('CREATE INDEX IF NOT EXISTS idx_items_expiration ON grocery_items(expiration_date)', (err) => {
-                if (err) console.error('Error creating expiration_date index:', err);
-            });
-
-            resolve();
-        });
+        } catch (err) {
+            console.error('Error in database initialization:', err);
+            reject(err);
+        }
     });
 }
 
@@ -175,6 +205,18 @@ const getExpiringItems = (userId) => {
         );
     });
 };
+
+// Close database connection on process termination
+process.on('SIGINT', () => {
+    db.close((err) => {
+        if (err) {
+            console.error('Error closing database:', err);
+        } else {
+            console.log('Database connection closed');
+        }
+        process.exit(0);
+    });
+});
 
 module.exports = {
     initializeDatabase,
