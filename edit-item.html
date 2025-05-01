@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edit Grocery Item</title>
+<link href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+<div class="nav-links">
+<a href="dashboard.html">Dashboard</a>
+<a href="add-item.html">Add Item</a>
+</div>
+<button id="logoutBtn">Logout</button>
+</nav>
+<div class="container">
+<h1>Edit Grocery Item</h1>
+<form id="editItemForm">
+<input type="hidden" id="editItemId">
+<input type="text" id="editItemName" placeholder="Item Name" required>
+<label for="editPurchaseDate">Purchase Date:</label>
+<input type="date" id="editPurchaseDate" required>
+<label for="editExpirationDate">Expiration Date:</label>
+<input type="date" id="editExpirationDate" required>
+<button type="submit">Update Item</button>
+</form>
+<div id="editItemMessage"></div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
